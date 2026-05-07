@@ -525,6 +525,10 @@ body{padding-bottom:62px;}
   .stats-row{grid-template-columns:1fr 1fr;}
   .vip-plans{grid-template-columns:1fr;}
 }
+
+/* ══ VID MUTE BUTTON ══ */
+.vid-mute-btn{position:absolute;top:58px;right:14px;z-index:20;width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.45);border:none;color:#fff;font-size:1rem;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(6px);transition:background .15s;}
+.vid-mute-btn:hover{background:rgba(0,0,0,.65);}
 </style>
 </head>
 <body>
@@ -1020,17 +1024,53 @@ body{padding-bottom:62px;}
 
 <!-- ══ MODALS ══ -->
 
+<!-- EMAIL CAPDRAWNN -->
+<div class="overlay" id="emailModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>📧 Criar Email CapDrawn</h3>
+      <button class="modal-x" onclick="closeModal('emailModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:.78rem;color:var(--t3);margin-bottom:14px;">Crie seu email <strong>@cpd.com</strong> para acessar o CapDrawn.</p>
+      <div class="frow">
+        <label>Nome do email *</label>
+        <div style="display:flex;align-items:center;border:1.5px solid var(--border);border-radius:9px;overflow:hidden;background:var(--w);">
+          <input class="finp" id="emailNome" placeholder="seunome" style="border:none;border-radius:0;flex:1;" oninput="this.value=this.value.replace(/[^a-z0-9._]/gi,'').toLowerCase()"/>
+          <span style="padding:0 12px;font-size:.82rem;font-weight:700;color:var(--t2);background:var(--bg);border-left:1.5px solid var(--border);white-space:nowrap;height:42px;display:flex;align-items:center;">@cpd.com</span>
+        </div>
+      </div>
+      <div class="frow"><label>Senha *</label><input class="finp" type="password" id="emailSenha" placeholder="Mínimo 6 caracteres"/></div>
+      <div class="frow"><label>Data de nascimento *</label><input class="finp" type="date" id="emailNasc"/></div>
+      <div id="emailErro" style="display:none;padding:8px 12px;background:#fff0f2;border:1px solid #ffc8d0;border-radius:8px;font-size:.78rem;color:var(--red);margin-top:8px;"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-out" onclick="closeModal('emailModal')">Cancelar</button>
+      <button class="btn-main" id="btnCriarEmail" onclick="criarEmailCapDrawn()">Criar email →</button>
+    </div>
+  </div>
+</div>
+
 <!-- LOGIN -->
 <div class="overlay" id="loginModal">
   <div class="modal">
     <div class="modal-head"><h3>Entrar no CapDrawn</h3><button class="modal-x" onclick="closeModal('loginModal')">✕</button></div>
     <div class="modal-body">
-      <div class="frow"><label>@ Usuário</label><input class="finp" id="liHandle" placeholder="seu_usuario"/></div>
-      <p style="font-size:.72rem;color:var(--t3);">Modo demo: use qualquer @ criado nesta sessão.</p>
+      <div class="frow"><label>Email CapDrawn *</label>
+        <div style="display:flex;align-items:center;border:1.5px solid var(--border);border-radius:9px;overflow:hidden;background:var(--w);">
+          <input class="finp" id="liHandle" placeholder="seunome" style="border:none;border-radius:0;flex:1;" oninput="this.value=this.value.replace(/[^a-z0-9._]/gi,'').toLowerCase()"/>
+          <span style="padding:0 12px;font-size:.82rem;font-weight:700;color:var(--t2);background:var(--bg);border-left:1.5px solid var(--border);white-space:nowrap;height:42px;display:flex;align-items:center;">@cpd.com</span>
+        </div>
+      </div>
+      <div class="frow"><label>Senha *</label><input class="finp" type="password" id="liSenha" placeholder="Sua senha"/></div>
+      <div id="loginErro" style="display:none;padding:8px 12px;background:#fff0f2;border:1px solid #ffc8d0;border-radius:8px;font-size:.78rem;color:var(--red);margin-top:8px;"></div>
     </div>
-    <div class="modal-foot">
-      <button class="btn-out" onclick="closeModal('loginModal')">Cancelar</button>
-      <button class="btn-main" onclick="doLogin()">Entrar →</button>
+    <div class="modal-foot" style="flex-direction:column;gap:8px;">
+      <div style="display:flex;gap:8px;width:100%;">
+        <button class="btn-out" style="flex:1;" onclick="closeModal('loginModal')">Cancelar</button>
+        <button class="btn-main" style="flex:2;" onclick="doLogin()">Entrar →</button>
+      </div>
+      <button class="btn-out" style="width:100%;font-size:.8rem;" onclick="closeModal('loginModal');openModal('emailModal')">Não tem email? Criar email @cpd.com</button>
     </div>
   </div>
 </div>
@@ -1039,6 +1079,7 @@ body{padding-bottom:62px;}
 <div class="overlay" id="regModal">
   <div class="modal">
     <div class="modal-head"><h3>Criar conta CapDrawn</h3><button class="modal-x" onclick="closeModal('regModal')">✕</button></div>
+    <div style="padding:8px 18px 0;"><div style="padding:8px 12px;background:var(--blue-lt);border:1px solid var(--blue-md);border-radius:8px;font-size:.76rem;color:var(--blue);">📧 Vinculado ao email: <strong id="regEmailShow">—</strong></div></div>
     <div class="modal-body">
       <div class="av-pick">
         <div class="av-prev" id="regAvPrev" style="background:var(--blue);font-size:1.3rem;">C</div>
