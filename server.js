@@ -19,6 +19,23 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
+
+// ═══════════════════════════════
+// FILTRO DE CONTEÚDO IMPRÓPRIO
+// ═══════════════════════════════
+const PALAVRAS_PROIBIDAS = [
+  'merda','porra','caralho','buceta','xoxota','viado','piroca','pau','fdp',
+  'filha da puta','vadia','puta','vagabunda','desgraca','arrombado',
+  'imbecil','idiota','retardado','babaca','cuzao','foda','fode','fodendo',
+  'shit','fuck','bitch','asshole','nigger','cunt','dick','pussy'
+];
+
+function filtrarConteudo(texto) {
+  if (!texto) return false;
+  const lower = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return PALAVRAS_PROIBIDAS.some(p => lower.includes(p.normalize('NFD').replace(/[\u0300-\u036f]/g, '')));
+}
+
 // ═══════════════════════════════
 // ROTAS DA API
 // ═══════════════════════════════
@@ -29,6 +46,9 @@ app.use(express.static(path.join(__dirname)));
 app.post('/api/register', async (req, res) => {
   try {
     const { handle, name, password, descricao, cor, avatar, area } = req.body;
+    if (filtrarConteudo(name) || filtrarConteudo(handle)) {
+      return res.json({ success: false, error: 'Nome ou @ contém conteúdo não permitido' });
+    }
     const hash = await bcrypt.hash(password, 10);
     const joined = new Date().toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
     
@@ -163,6 +183,9 @@ app.get('/api/comments', async (req, res) => {
 app.post('/api/comments', async (req, res) => {
   try {
     const { handle, texto, super_chat } = req.body;
+    if (filtrarConteudo(texto)) {
+      return res.json({ success: false, error: 'Conteúdo não permitido' });
+    }
     const result = await pool.query(
       'INSERT INTO comments (handle, texto, super_chat) VALUES ($1,$2,$3) RETURNING *',
       [handle, texto, super_chat || null]
@@ -246,6 +269,91 @@ app.put('/api/settings/:key', async (req, res) => {
       'INSERT INTO settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=$2',
       [req.params.key, req.body.value]
     );
+    res.json({ success: true });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+
+// ── EMAILS @cpd.com ──
+
+// Criar email
+app.post('/api/email/criar', async (req, res) => {
+  try {
+    const { nome, senha, nascimento } = req.body;
+    if (!nome || !senha || !nascimento) {
+      return res.json({ success: false, error: 'Campos obrigatórios faltando' });
+    }
+    const emailCompleto = nome.toLowerCase().replace(/[^a-z0-9._]/g, '') + '@cpd.com';
+    if (senha.length < 6) {
+      return res.json({ success: false, error: 'Senha deve ter pelo menos 6 caracteres' });
+    }
+    // Verificar maioridade
+    const nascDate = new Date(nascimento);
+    const age = Math.floor((Date.now() - nascDate) / (365.25 * 24 * 3600 * 1000));
+    if (age < 13) {
+      return res.json({ success: false, error: 'Você precisa ter pelo menos 13 anos' });
+    }
+    const bcrypt_senha = await bcrypt.hash(senha, 10);
+    const result = await pool.query(
+      `INSERT INTO emails (email, senha_hash, nascimento) VALUES ($1,$2,$3)
+       ON CONFLICT (email) DO NOTHING RETURNING *`,
+      [emailCompleto, bcrypt_senha, nascimento]
+    );
+    if (result.rows.length === 0) {
+      return res.json({ success: false, error: 'Email já está em uso' });
+    }
+    res.json({ success: true, email: emailCompleto });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// Verificar se email existe
+app.get('/api/email/verificar/:email', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT email, handle FROM emails WHERE email = $1', [req.params.email]);
+    if (result.rows.length === 0) {
+      return res.json({ exists: false });
+    }
+    res.json({ exists: true, handle: result.rows[0].handle });
+  } catch (err) {
+    res.json({ exists: false });
+  }
+});
+
+// Login com email
+app.post('/api/email/login', async (req, res) => {
+  try {
+    const { email, senha } = req.body;
+    const result = await pool.query('SELECT * FROM emails WHERE email = $1', [email.toLowerCase()]);
+    if (result.rows.length === 0) {
+      return res.json({ success: false, error: 'Email não encontrado' });
+    }
+    const valid = await bcrypt.compare(senha, result.rows[0].senha_hash);
+    if (!valid) {
+      return res.json({ success: false, error: 'Senha incorreta' });
+    }
+    const handle = result.rows[0].handle;
+    if (!handle) {
+      return res.json({ success: true, emailVerified: true, handle: null, message: 'Crie seu canal' });
+    }
+    const userRes = await pool.query('SELECT * FROM users WHERE handle = $1', [handle]);
+    if (userRes.rows.length === 0) {
+      return res.json({ success: true, emailVerified: true, handle: null });
+    }
+    res.json({ success: true, user: formatUser(userRes.rows[0]) });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// Vincular email a handle após criar canal
+app.put('/api/email/vincular', async (req, res) => {
+  try {
+    const { email, handle } = req.body;
+    await pool.query('UPDATE emails SET handle = $1 WHERE email = $2', [handle, email]);
     res.json({ success: true });
   } catch (err) {
     res.json({ success: false, error: err.message });
