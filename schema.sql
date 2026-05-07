@@ -19,6 +19,18 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Tabela de emails @cpd.com
+CREATE TABLE IF NOT EXISTS emails (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(150) UNIQUE NOT NULL,
+    senha_hash VARCHAR(255) NOT NULL,
+    nascimento DATE NOT NULL,
+    handle VARCHAR(50) DEFAULT NULL REFERENCES users(handle) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_emails_handle ON emails(handle);
+
 -- Tabela de comentários
 CREATE TABLE IF NOT EXISTS comments (
     id SERIAL PRIMARY KEY,
