@@ -1,0 +1,92 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  handle       String   @unique
+  email        String   @unique
+  password     String
+  bio          String?
+  avatarUrl    String?
+  area         String?
+  isVip        Boolean  @default(false)
+  isVerified   Boolean  @default(false)
+  channelEmail String?
+  followers    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  videos        Video[]
+  comments      Comment[]
+  likes         Like[]
+  reports       Report[]
+  subscriptions Subscription[] @relation("Subscriber")
+  subscribers   Subscription[] @relation("Channel")
+}
+
+model Video {
+  id           String   @id @default(cuid())
+  caption      String?
+  url          String
+  thumbnailUrl String?
+  views        Int      @default(0)
+  distributed  Boolean  @default(false)
+  removed      Boolean  @default(false)
+  flagged      Boolean  @default(false)
+  uploaderId   String
+  uploader     User     @relation(fields: [uploaderId], references: [id])
+  createdAt    DateTime @default(now())
+
+  comments Comment[]
+  likes    Like[]
+  reports  Report[]
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  text      String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  videoId   String?
+  video     Video?   @relation(fields: [videoId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  userId    String
+  videoId   String
+  user      User     @relation(fields: [userId], references: [id])
+  video     Video    @relation(fields: [videoId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, videoId])
+}
+
+model Subscription {
+  id           String @id @default(cuid())
+  subscriberId String
+  channelId    String
+  subscriber   User   @relation("Subscriber", fields: [subscriberId], references: [id])
+  channel      User   @relation("Channel", fields: [channelId], references: [id])
+
+  @@unique([subscriberId, channelId])
+}
+
+model Report {
+  id         String   @id @default(cuid())
+  type       String
+  subtype    String?
+  status     String   @default("pending")
+  reporterId String
+  videoId    String
+  reporter   User     @relation(fields: [reporterId], references: [id])
+  video      Video    @relation(fields: [videoId], references: [id])
+  createdAt  DateTime @default(now())
+}
