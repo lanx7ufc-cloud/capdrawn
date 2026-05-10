@@ -6,14 +6,15 @@ export default async function handler(req, res) {
   const { handle } = req.query
 
   if (req.method === 'PUT') {
-    const { name, desc, avatar, color } = req.body
+    const { name, desc, avatar, color, link } = req.body
     try {
       const user = await prisma.user.update({
         where: { handle },
         data: {
-          ...(name             && { name }),
+          ...(name              && { name }),
           ...(desc !== undefined && { bio: desc }),
           ...(avatar !== undefined && { avatarUrl: avatar }),
+          ...(link !== undefined && { link }),
         }
       })
       res.json({ ok: true, user })
@@ -26,7 +27,7 @@ export default async function handler(req, res) {
     try {
       const user = await prisma.user.findUnique({
         where: { handle },
-        include: { videos: true }
+        include: { videos: { where: { removed: false } } }
       })
       if (!user) return res.status(404).json({ error: 'Usuário não encontrado' })
       res.json({ ok: true, user })
