@@ -1,21 +1,30 @@
-import { PrismaClient } from '@prisma/client'
 import jwt from 'jsonwebtoken'
+import { PrismaClient } from '@prisma/client'
 
-const prisma = new PrismaClient()
+const globalForPrisma = globalThis
+if (!globalForPrisma.prisma) {
+  globalForPrisma.prisma = new PrismaClient()
+}
+const prisma = globalForPrisma.prisma
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).end()
 
-  const authHeader = req.headers.authorization || ''
-  const token = authHeader.replace('Bearer ', '').trim()
-
-  if (!token) return res.status(401).json({ error: 'Token não enviado' })
-  if (!process.env.JWT_SECRET) return res.status(500).json({ error: 'Servidor sem JWT_SECRET' })
-
   try {
+    const authHeader = req.headers.authorization || ''
+    const token = authHeader.replace('Bearer ', '').trim()
+
+    if (!token)
+      return res.status(401).json({ ok: false, error: 'Token não enviado' })
+
+    if (!process.env.JWT_SECRET)
+      return res.status(500).json({ ok: false, error: 'JWT_SECRET não configurado' })
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
     const user = await prisma.user.findUnique({ where: { id: decoded.userId } })
-    if (!user) return res.status(401).json({ error: 'Usuário não encontrado' })
+
+    if (!user)
+      return res.status(401).json({ ok: false, error: 'Usuário não encontrado' })
 
     res.json({
       ok: true,
@@ -30,6 +39,7 @@ export default async function handler(req, res) {
       }
     })
   } catch (e) {
-    res.status(401).json({ error: 'Token inválido ou expirado' })
+    console.error('ME ERROR:', e)
+    res.status(401).json({ ok: false, error: 'Token inválido ou expirado' })
   }
 }
