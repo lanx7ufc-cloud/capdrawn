@@ -3164,46 +3164,76 @@ function selDist(type){
   });
 }
 
-function submitVideo(){
+async function submitVideo(){
   if(!APP.me||!currentVideoFile||!videoAnalysisOk){toast('⚠️ Selecione um vídeo válido!');return;}
+
+  const btn=document.getElementById('uploadSubmitBtn');
+  btn.disabled=true; btn.textContent='⏳ Enviando...';
+
   const caption=document.getElementById('vidCaption').value.trim()||'🎥 Vídeo da comunidade';
-  const blobUrl=document.getElementById('uploadVidEl').src;
-  const cvId=nextCommunityVidId++;
+  const distributed=selectedDist==='bots'||selectedDist==='both';
+  const botPresenter=distributed?getRandomBot().handle:null;
 
-  const communityVid={
-    id: cvId,
-    blobUrl,
-    caption,
-    uploaderHandle: APP.me.handle,
-    distributed: selectedDist==='bots'||selectedDist==='both',
-    removed: false,
-    time: 'agora',
-    views: 0,
-  };
-  COMMUNITY_VIDEOS.push(communityVid);
+  try{
+    // Envia para o servidor (Cloudinary via /api/videos/upload)
+    const fd=new FormData();
+    fd.append('video', currentVideoFile);
+    fd.append('caption', caption);
+    fd.append('distributed', String(distributed));
+    fd.append('uploaderId', APP.me.handle);
 
-  // Adiciona ao perfil do usuário se 'profile' ou 'both'
-  if(selectedDist==='profile'||selectedDist==='both'){
-    if(!APP.me.videos)APP.me.videos=[];
-    APP.me.videos.unshift({blobUrl,caption,views:0,communityId:cvId});
-  }
+    const res=await fetch('/api/videos/upload',{method:'POST',body:fd});
+    const data=await res.json();
+    if(!data.ok) throw new Error(data.error||'Erro no servidor');
 
-  closeModal('uploadModal');
-  clearVideo();
+    const cloudUrl=data.url; // URL permanente do Cloudinary
+    const cvId=nextCommunityVidId++;
 
-  const msgs={
-    profile:'✅ Vídeo publicado no seu perfil!',
-    bots:'🤖 Vídeo enviado para distribuição pelos bots!',
-    both:'🚀 Vídeo publicado no perfil e em distribuição pelos bots!'
-  };
-  toast(msgs[selectedDist]||'✅ Publicado!');
+    const communityVid={
+      id: cvId,
+      dbId: data.video?.id||null,
+      blobUrl: cloudUrl,        // URL real, não blob:
+      caption,
+      uploaderHandle: APP.me.handle,
+      botPresenter,
+      distributed,
+      removed: false,
+      time: 'agora',
+      views: 0,
+    };
+    COMMUNITY_VIDEOS.push(communityVid);
+    saveVideosLocal(); // salva a URL Cloudinary no localStorage
 
-  // Bots comentam no vídeo após alguns segundos
-  if(selectedDist==='bots'||selectedDist==='both'){
-    setTimeout(()=>{
-      const rb=getRandomBot();
-      toast(`🤖 @${rb.handle} começou a distribuir seu vídeo!`);
-    },3000);
+    // Adiciona ao perfil do usuário
+    if(selectedDist==='profile'||selectedDist==='both'){
+      if(!APP.me.videos)APP.me.videos=[];
+      APP.me.videos.unshift({blobUrl:cloudUrl,caption,views:0,dbId:data.video?.id||null});
+      saveUserLocal(APP.me);
+    }
+
+    closeModal('uploadModal');
+    clearVideo();
+    btn.disabled=false; btn.textContent='Publicar →';
+    buildPreviewCards(); // atualiza os cards da home
+
+    const msgs={
+      profile:'✅ Vídeo publicado no seu perfil!',
+      bots:'🤖 Vídeo enviado para distribuição pelos bots!',
+      both:'🚀 Vídeo publicado no perfil e distribuído pelos bots!'
+    };
+    toast(msgs[selectedDist]||'✅ Publicado!');
+
+    if(distributed){
+      setTimeout(()=>{
+        const rb=botPresenter?USERS[botPresenter]:getRandomBot();
+        toast(`🤖 @${rb?.handle||'bot'} está distribuindo seu vídeo!`);
+      },3000);
+    }
+
+  }catch(e){
+    console.error('submitVideo error:',e);
+    toast('❌ Erro no upload: '+e.message);
+    btn.disabled=false; btn.textContent='Publicar →';
   }
 }
 
