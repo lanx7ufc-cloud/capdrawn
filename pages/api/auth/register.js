@@ -1,6 +1,8 @@
-import prisma from '../../../lib/prisma'
+import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+
+const prisma = new PrismaClient()
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -13,10 +15,12 @@ export default async function handler(req, res) {
   if (password.length < 6)
     return res.status(400).json({ error: 'Senha deve ter ao menos 6 caracteres' })
 
+  // handle: só letras, números e underscore, sem espaço
   const handleClean = handle.toLowerCase().replace(/[^a-z0-9_]/g, '')
   if (handleClean.length < 3)
     return res.status(400).json({ error: 'Handle deve ter ao menos 3 caracteres válidos' })
 
+  // email: aceita "joao" → "joao@capdrawn.com" ou email completo externo
   const fullEmail = email.includes('@') ? email : `${email}@capdrawn.com`
 
   try {
@@ -39,6 +43,7 @@ export default async function handler(req, res) {
       }
     })
 
+    // Faz login automático após criar conta
     let token = null
     if (process.env.JWT_SECRET) {
       token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '30d' })
@@ -58,7 +63,7 @@ export default async function handler(req, res) {
       }
     })
   } catch (e) {
-    console.error('[register] erro:', e)
-    res.status(500).json({ error: 'Erro ao criar conta', detail: e.message })
+    console.error(e)
+    res.status(500).json({ error: 'Erro ao criar conta' })
   }
 }
