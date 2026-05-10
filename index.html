@@ -1965,48 +1965,82 @@ function openVideoFeed(startBot){
 }
 
 async function loadFeedItems(container, count){
+  // Tenta buscar vídeos reais da API primeiro
+  try{
+    const res = await fetch('/api/videos/feed');
+    if(res.ok){
+      const data = await res.json();
+      if(data.videos && data.videos.length){
+        data.videos.forEach(v=>{
+          if(!COMMUNITY_VIDEOS.find(c=>c.dbId===v.id)){
+            COMMUNITY_VIDEOS.push({
+              id: nextCommunityVidId++,
+              dbId: v.id,
+              blobUrl: v.url,
+              caption: v.caption || '🎥 Vídeo da comunidade',
+              uploaderHandle: v.uploader?.handle || 'usuario',
+              distributed: v.distributed,
+              removed: false,
+              time: 'recente',
+            });
+          }
+        });
+      }
+    }
+  }catch(e){}
+
+  const realPool = COMMUNITY_VIDEOS.filter(v=>!v.removed && v.blobUrl);
+
+  if(realPool.length === 0){
+    const ph = document.createElement('div');
+    ph.className = 'vid-snap-item';
+    ph.innerHTML = `<div style="position:absolute;inset:0;background:#111;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:#fff;text-align:center;padding:32px;">
+      <div style="font-size:4rem;">🎬</div>
+      <div style="font-size:1.1rem;font-weight:700;">Nenhum vídeo ainda</div>
+      <div style="font-size:.85rem;opacity:.6;">Seja o primeiro a postar! Toque em + abaixo.</div>
+    </div>`;
+    container.appendChild(ph);
+    return;
+  }
+
   for(let i=0;i<count;i++){
     const card = buildCommunityCard(container);
-    container.appendChild(card);
+    if(card) container.appendChild(card);
   }
   setupVidObserver(container);
 }
 
 function buildCommunityCard(container){
+  // Somente vídeos reais — sem emoji fake
+  const realPool = COMMUNITY_VIDEOS.filter(v=>!v.removed && v.blobUrl);
+  if(realPool.length === 0) return null;
+
+  const cv = rand(realPool);
+  const uploader = USERS[cv.uploaderHandle] || getRandomBot();
+  const bot = cv.botPresenter ? (USERS[cv.botPresenter] || uploader) : uploader;
+
   const div = document.createElement('div');
   div.className = 'vid-snap-item';
-  const bot = getRandomBot();
-  const emoji = rand(MEME_EMOJIS);
+
   const vidObj = {
     id: nextVidId++,
     bot: bot,
-    isUserVideo: false,
-    blobUrl: null,
-    likes: randInt(100,99000),
+    isUserVideo: true,
+    blobUrl: cv.blobUrl,
+    uploaderHandle: cv.uploaderHandle,
+    communityVideoId: cv.id,
+    likes: randInt(100,9900),
     likedBy: [],
     comments: buildBotComments(bot),
-    views: randInt(1000,500000),
-    time: `${randInt(1,59)}m atrás`,
-    caption: rand(['💀 Sem contexto nenhum', '👁 O que eu acabei de assistir', '🔥 Feed infinito ativo', '🤡 Clássico demais', '😈 Prepare o espírito']),
+    views: randInt(100,50000),
+    time: cv.time || 'recente',
+    caption: cv.caption || '🎥 Vídeo da comunidade',
     removed: false,
   };
 
-  // Check if there are community videos to show
-  const communityPool = COMMUNITY_VIDEOS.filter(v=>v.distributed&&!v.removed);
-  const userPool = COMMUNITY_VIDEOS.filter(v=>!v.removed);
-
-  if(userPool.length > 0 && Math.random() < 0.5){
-    const cv = rand(userPool);
-    vidObj.blobUrl = cv.blobUrl;
-    vidObj.caption = cv.caption || vidObj.caption;
-    vidObj.isUserVideo = true;
-    vidObj.uploaderHandle = cv.uploaderHandle;
-    vidObj.communityVideoId = cv.id;
-  }
-
   MEME_VIDEOS.push(vidObj);
   div.dataset.vidId = vidObj.id;
-  div.innerHTML = buildVidHTML(bot, vidObj, emoji);
+  div.innerHTML = buildVidHTML(bot, vidObj, '');
 
   const vidEl = div.querySelector('video');
   if(vidEl) vidEl.addEventListener('click', ()=>toggleVidPlay(vidEl, vidObj.id));
@@ -3359,8 +3393,92 @@ function toast(msg){
 // ═══════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════
-document.addEventListener('DOMContentLoaded',()=>{
+
+// ═══════════════════════════════════════════════════════
+// PERSISTÊNCIA LOCAL
+// ═══════════════════════════════════════════════════════
+function saveUserLocal(u){
+  try{
+    const users=JSON.parse(localStorage.getItem('cdUsers')||'{}');
+    users[u.handle]=u;
+    localStorage.setItem('cdUsers',JSON.stringify(users));
+    if(APP.me&&APP.me.handle===u.handle)localStorage.setItem('cdLoggedIn',u.handle);
+  }catch(e){}
+}
+
+function saveCommentsLocal(){
+  try{localStorage.setItem('cdComments',JSON.stringify(COMMENTS.slice(0,100)));}catch(e){}
+}
+
+function saveVideosLocal(){
+  try{
+    // Salva apenas metadados (sem blobUrl de arquivo local — apenas URLs do Cloudinary)
+    const toSave=COMMUNITY_VIDEOS.map(v=>({
+      id:v.id, dbId:v.dbId||null,
+      blobUrl: v.blobUrl&&v.blobUrl.startsWith('http') ? v.blobUrl : null,
+      caption:v.caption, uploaderHandle:v.uploaderHandle,
+      botPresenter:v.botPresenter||null,
+      distributed:v.distributed, removed:v.removed, time:v.time,
+    })).filter(v=>v.blobUrl); // só salva se tiver URL real do Cloudinary
+    localStorage.setItem('cdVideos',JSON.stringify(toSave));
+  }catch(e){}
+}
+
+async function loadPersistedData(){
+  try{
+    // Usuários locais
+    const users=JSON.parse(localStorage.getItem('cdUsers')||'{}');
+    Object.values(users).forEach(u=>{if(!u.isBot)USERS[u.handle]=u;});
+    // Comentários
+    const comments=JSON.parse(localStorage.getItem('cdComments')||'[]');
+    if(comments.length){
+      COMMENTS.push(...comments);
+      nextId=Math.max(...comments.map(c=>c.id||0),nextId)+1;
+    }
+    // Vídeos salvos localmente (só URLs Cloudinary)
+    const videos=JSON.parse(localStorage.getItem('cdVideos')||'[]');
+    videos.forEach(v=>{
+      if(v.blobUrl&&!COMMUNITY_VIDEOS.find(c=>c.id===v.id))
+        COMMUNITY_VIDEOS.push(v);
+    });
+    if(COMMUNITY_VIDEOS.length){
+      nextCommunityVidId=Math.max(...COMMUNITY_VIDEOS.map(v=>v.id||0))+1;
+    }
+    // Busca vídeos do servidor também
+    try{
+      const res=await fetch('/api/videos/feed');
+      if(res.ok){
+        const data=await res.json();
+        if(data.videos&&data.videos.length){
+          data.videos.forEach(v=>{
+            if(!COMMUNITY_VIDEOS.find(c=>c.dbId===v.id)){
+              COMMUNITY_VIDEOS.push({
+                id:nextCommunityVidId++,dbId:v.id,
+                blobUrl:v.url,caption:v.caption||'🎥 Vídeo da comunidade',
+                uploaderHandle:v.uploader?.handle||'usuario',
+                distributed:v.distributed,removed:false,time:'recente',
+              });
+              // Adiciona ao perfil do uploader se ele existir localmente
+              if(USERS[v.uploader?.handle]&&!USERS[v.uploader.handle].videos?.find(x=>x.dbId===v.id)){
+                if(!USERS[v.uploader.handle].videos)USERS[v.uploader.handle].videos=[];
+                USERS[v.uploader.handle].videos.unshift({blobUrl:v.url,caption:v.caption,views:v.views||0,dbId:v.id});
+              }
+            }
+          });
+          saveVideosLocal();
+        }
+      }
+    }catch(e){}
+    // Auto-login
+    const loggedIn=localStorage.getItem('cdLoggedIn');
+    if(loggedIn&&USERS[loggedIn]&&!USERS[loggedIn].isBot)loginUser(loggedIn);
+  }catch(e){console.warn('loadPersistedData:',e);}
+}
+
+
+document.addEventListener('DOMContentLoaded',async ()=>{
   initBots();
+  await loadPersistedData();
   const botKeys=Object.keys(USERS).filter(k=>USERS[k].isBot).slice(0,5);
   botKeys.forEach((handle,i)=>{
     const u=USERS[handle];
