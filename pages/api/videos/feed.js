@@ -1,14 +1,29 @@
 import { PrismaClient } from '@prisma/client'
+
 const prisma = new PrismaClient()
 
 export default async function handler(req, res) {
-  const videos = await prisma.video.findMany({
-    where: { removed: false },
-    include: {
-      uploader: { select: { name: true, handle: true, avatarUrl: true } }
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 20
-  })
-  res.json(videos)
+  if (req.method !== 'GET') return res.status(405).end()
+
+  try {
+    const page  = parseInt(req.query.page  || '1')
+    const limit = parseInt(req.query.limit || '20')
+    const skip  = (page - 1) * limit
+
+    const videos = await prisma.video.findMany({
+      where: { removed: false, flagged: false },
+      include: {
+        uploader: { select: { name: true, handle: true, avatarUrl: true } },
+        _count: { select: { likes: true, comments: true } }
+      },
+      orderBy: { createdAt: 'desc' },
+      take:  limit,
+      skip,
+    })
+
+    res.json({ ok: true, videos, page, limit })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ error: 'Erro ao buscar vídeos' })
+  }
 }
