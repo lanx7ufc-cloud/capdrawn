@@ -3090,31 +3090,40 @@ async function saveProfile(){
   if(!APP.me)return;
 
   const u=APP.me;
+  const btn=document.getElementById('saveProfileBtn');
+  if(btn){btn.disabled=true;btn.textContent='Salvando...';}
 
   u.name=document.getElementById('editName').value.trim()||u.name;
-
   u.desc=document.getElementById('editDesc').value.trim();
 
-  if(editAvUrl){
-    // Upload da foto para Cloudinary via API
-    try{
-      const blob = await fetch(editAvUrl).then(r=>r.blob());
-      const fd = new FormData();
-      fd.append('video', blob, 'avatar.jpg'); // reutiliza o endpoint de upload
-      // Usa endpoint dedicado se existir, senão atualiza só os dados de texto
-    }catch(e){}
-    u.avatar=editAvUrl;
-    editAvUrl=null;
+  try{
+    // Envia avatar + dados pro servidor
+    const body={name:u.name,bio:u.desc};
+    if(editAvUrl) body.avatarBase64=editAvUrl;
+
+    const res=await fetch('/api/auth/avatar',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        ...(APP.token?{'Authorization':'Bearer '+APP.token}:{})
+      },
+      body:JSON.stringify(body)
+    });
+    const data=await res.json();
+
+    if(data.ok && data.user){
+      // Atualiza com URL real do Cloudinary
+      u.avatar=data.user.avatarUrl||u.avatar;
+      u.name=data.user.name||u.name;
+    }
+  }catch(e){
+    console.warn('saveProfile server error:',e);
   }
 
-  // Salva no servidor
-  fetch(`/api/users/${u.handle}`,{
-    method:'PUT',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({name:u.name,desc:u.desc,avatar:u.avatar||null})
-  }).catch(()=>{});
+  if(editAvUrl){u.avatar=editAvUrl;editAvUrl=null;}
 
   saveUserLocal(u);
+  if(btn){btn.disabled=false;btn.textContent='Salvar';}
   closeModal('profileModal');loginUser(u.handle);toast('✅ Perfil atualizado!');
 
 }
