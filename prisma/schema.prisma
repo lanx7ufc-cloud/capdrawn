@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -18,6 +20,7 @@ model User {
   area         String?
   isVip        Boolean  @default(false)
   isVerified   Boolean  @default(false)
+  isBot        Boolean  @default(false)   // ← NOVO: marca contas de bot
   channelEmail String?
   link         String?  @default("")
   followers    Int      @default(0)
@@ -27,6 +30,7 @@ model User {
   comments      Comment[]
   likes         Like[]
   reports       Report[]
+  notifications Notification[]
   subscriptions Subscription[] @relation("Subscriber")
   subscribers   Subscription[] @relation("Channel")
 }
@@ -37,6 +41,7 @@ model Video {
   url          String
   thumbnailUrl String?
   views        Int      @default(0)
+  likesCount   Int      @default(0)   // ← NOVO: likes fixos salvos no banco
   distributed  Boolean  @default(false)
   removed      Boolean  @default(false)
   flagged      Boolean  @default(false)
@@ -90,4 +95,15 @@ model Report {
   reporter   User     @relation(fields: [reporterId], references: [id])
   video      Video    @relation(fields: [videoId], references: [id])
   createdAt  DateTime @default(now())
+}
+
+// ← NOVO: Notificações de primeira publicação
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String   // "first_publish", "new_follower", etc.
+  seen      Boolean  @default(false)
+  data      Json?    // dados extras (ex: videoId, likes, etc.)
+  createdAt DateTime @default(now())
 }
